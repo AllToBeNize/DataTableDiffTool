@@ -20,6 +20,7 @@ namespace
 {
 	constexpr float NameWidth = 160;
 	constexpr float FieldWidth = 180;
+	const FLinearColor FocusedBackground(0.2f, 0.4f, 0.75f, 0.45f);
 	const FString RowWidthKey = TEXT("@RowName");
 	FSlateColor DiffColor(ETableDiffKind Kind)
 	{
@@ -100,7 +101,7 @@ namespace
 			[SNew(SBorder).Padding(3, 1).BorderImage(FAppStyle::GetBrush(TEXT("WhiteBrush")))
 				.BorderBackgroundColor_Lambda([this, Path]()
 				{
-					return IsFocused(Path) ? FLinearColor(0.2f, 0.4f, 0.75f, 0.45f) : FLinearColor::Transparent;
+					return IsFocused(Path) ? FocusedBackground : FLinearColor::Transparent;
 				})
 				[SNew(STextBlock).Text(FText::FromString(Value)).ToolTipText(FText::FromString(Value))
 					.ColorAndOpacity(DiffColor(Kind)).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]];
@@ -149,7 +150,7 @@ namespace
 			if (Column == TEXT("Property"))
 			{
 				return SNew(SBorder).Padding(FMargin(6, 3)).BorderImage(FAppStyle::GetBrush(TEXT("DetailsView.CategoryMiddle")))
-					.BorderBackgroundColor_Lambda([this]() { return Focused.Get() ? FLinearColor(0.2f, 0.4f, 0.75f, 0.45f) : IsHovered() ? FStyleColors::Hover.GetSpecifiedColor() : Field->Children.IsEmpty() ? FStyleColors::Panel.GetSpecifiedColor() : FStyleColors::Header.GetSpecifiedColor(); })
+					.BorderBackgroundColor_Lambda([this]() { return DetailBackground(true); })
 					[SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SExpanderArrow, SharedThis(this))]
 					+ SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
@@ -160,7 +161,7 @@ namespace
 			if (Field->OldValue.IsEmpty() && Field->NewValue.IsEmpty() && !Field->Children.IsEmpty())
 			{
 				return SNew(SBorder).Padding(0).BorderImage(FAppStyle::GetBrush(TEXT("DetailsView.CategoryMiddle")))
-					.BorderBackgroundColor_Lambda([this]() { return Focused.Get() ? FLinearColor(0.2f, 0.4f, 0.75f, 0.45f) : FStyleColors::Header.GetSpecifiedColor(); });
+					.BorderBackgroundColor_Lambda([this]() { return DetailBackground(); });
 			}
 			const FString Value = FieldValue(*Field, bLocal, bAbsentRow);
 			TSharedRef<SWidget> ValueWidget = SNew(SPropertyDiffTextBox).Value(FText::FromString(Value)).Color(DiffColor(Field->Kind));
@@ -172,10 +173,16 @@ namespace
 			}
 			return SNew(SBorder).Padding(FMargin(6, 3))
 				.BorderImage(FAppStyle::GetBrush(TEXT("WhiteBrush")))
-				.BorderBackgroundColor_Lambda([this]() { return Focused.Get() ? FLinearColor(0.2f, 0.4f, 0.75f, 0.45f) : FStyleColors::Panel.GetSpecifiedColor(); })
+				.BorderBackgroundColor_Lambda([this]() { return DetailBackground(); })
 				[ValueWidget];
 		}
 	private:
+		FLinearColor DetailBackground(bool bAllowHover = false) const
+		{
+			if (Focused.Get()) { return FocusedBackground; }
+			if (bAllowHover && IsHovered()) { return FStyleColors::Hover.GetSpecifiedColor(); }
+			return Field->Children.IsEmpty() ? FStyleColors::Panel.GetSpecifiedColor() : FStyleColors::Header.GetSpecifiedColor();
+		}
 		virtual ESelectionMode::Type GetSelectionMode() const override { return ESelectionMode::None; }
 		virtual FVector2D ComputeDesiredSize(float Scale) const override
 		{
@@ -230,7 +237,7 @@ void SDataTableDiffView::Construct(const FArguments& Args)
 
 bool SDataTableDiffView::CanRevertJump(TSharedPtr<FTableDiffJump> Jump) const
 {
-	return Jump && CanRevertChange.IsBound() && CanRevertChange.Execute(Jump->Row->Name, Jump->RevertPath);
+	return Jump && CanRevertChange.IsBound() && CanRevertChange.Execute(Jump->Row->Name, Jump->RestoreTarget);
 }
 
 FReply SDataTableDiffView::RevertJump(TSharedPtr<FTableDiffJump> Jump)
@@ -238,7 +245,7 @@ FReply SDataTableDiffView::RevertJump(TSharedPtr<FTableDiffJump> Jump)
 	if (CanRevertJump(Jump))
 	{
 		FocusRow(Jump->Row, Jump->FieldPath);
-		RevertChange.ExecuteIfBound(Jump->Row->Name, Jump->RevertPath);
+		RevertChange.ExecuteIfBound(Jump->Row->Name, Jump->RestoreTarget);
 	}
 	return FReply::Handled();
 }
@@ -345,7 +352,7 @@ void SDataTableDiffView::SetComparison(FTableDiffModel InModel, const FString& O
 			{
 				if (Field->Kind == ETableDiffKind::Unchanged) { continue; }
 				auto Jump = MakeShared<FTableDiffJump>(); Jump->Row = Row; Jump->FieldPath = Field->Path;
-				Jump->Label = Field->Label; Jump->RevertPath = Field->RevertPath; Jump->Kind = Field->Kind;
+				Jump->Label = Field->Label; Jump->RestoreTarget = Field->RestoreTarget; Jump->Kind = Field->Kind;
 				Children.Add(Jump); AllJumps.Add(Jump);
 				// An added/removed element is one atomic change; its preview still exposes every field.
 				if (Field->Kind == ETableDiffKind::Modified) { AddChanges(Field->Children, Jump->Children); }

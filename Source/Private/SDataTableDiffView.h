@@ -14,7 +14,7 @@ struct FTableDiffJump
 	TSharedPtr<FTableRowDiff> Row;
 	FString FieldPath;
 	FString Label;
-	FString RevertPath;
+	FTableRestoreTarget RestoreTarget;
 	TArray<TSharedPtr<FTableDiffJump>> Children;
 	TArray<TSharedPtr<FTableDiffJump>> FilteredChildren;
 	ETableDiffKind Kind = ETableDiffKind::Modified;
@@ -23,8 +23,8 @@ struct FTableDiffJump
 class SDataTableDiffView : public SCompoundWidget
 {
 public:
-	DECLARE_DELEGATE_RetVal_TwoParams(bool, FCanRevertChange, FName, const FString&);
-	DECLARE_DELEGATE_TwoParams(FRevertChange, FName, const FString&);
+	DECLARE_DELEGATE_RetVal_TwoParams(bool, FCanRevertChange, FName, const FTableRestoreTarget&);
+	DECLARE_DELEGATE_TwoParams(FRevertChange, FName, const FTableRestoreTarget&);
 	SLATE_BEGIN_ARGS(SDataTableDiffView) {}
 		SLATE_ARGUMENT(FTableDiffModel, Model)
 		SLATE_ARGUMENT(FString, OldLabel)

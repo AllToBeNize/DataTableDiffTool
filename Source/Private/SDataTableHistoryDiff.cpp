@@ -15,16 +15,28 @@
 #include "HAL/PlatformFileManager.h"
 #include "Misc/Paths.h"
 #include "DataTableRevisionHistory.h"
-#include "Framework/Application/SlateApplication.h"
-#include "Widgets/SWindow.h"
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
-#include "Misc/App.h"
 #include "DataTableDiffRevert.h"
 #include "Editor.h"
 #include "Serialization/ArchiveReplaceObjectRef.h"
 #include "Misc/PackageName.h"
+#include "Misc/PackagePath.h"
+#include "Async/Async.h"
 
 #define LOCTEXT_NAMESPACE "DataTableDiffTool"
+
+namespace
+{
+	UDataTable* CreateHistoricalSnapshot(const UDataTable* Table, UDataTable* Workspace)
+	{
+		if (!Table) { return nullptr; }
+		UDataTable* Snapshot = DuplicateObject<UDataTable>(Table, GetTransientPackage());
+		TMap<UObject*, UObject*> Replacement;
+		Replacement.Add(Snapshot, Workspace);
+		FArchiveReplaceObjectRef<UObject> Replace(Snapshot, Replacement);
+		return Snapshot;
+	}
+}
 
 void SDataTableHistoryDiff::Construct(const FArguments& Args)
 {
@@ -78,37 +90,26 @@ TSharedRef<SWidget> SDataTableHistoryDiff::MakeRevisionControls(bool bRight)
 
 void SDataTableHistoryDiff::SetHistorical(const UDataTable* Table)
 {
-	Historical.Reset(Table ? DuplicateObject<UDataTable>(Table, GetTransientPackage()) : nullptr);
-	if (Historical.IsValid())
-	{
-		TMap<UObject*, UObject*> Replacement;
-		Replacement.Add(Historical.Get(), Workspace.Get());
-		FArchiveReplaceObjectRef<UObject> Replace(Historical.Get(), Replacement);
-	}
+	Historical.Reset(CreateHistoricalSnapshot(Table, Workspace.Get()));
 }
 
 void SDataTableHistoryDiff::InitializeComparison(const FAssetDiffArgs& Args)
 {
-	bUseInitialComparison = true; bHasComparison = true; bRightMissing = Args.NewAsset == nullptr;
+	bHasComparison = true; bRightMissing = Args.NewAsset == nullptr;
 	bWorkspaceEditable = !bRightMissing && Args.NewRevision.Revision.IsEmpty()
 		&& !FPackageName::IsTempPackage(Workspace->GetOutermost()->GetName());
-	bRightLocal = bWorkspaceEditable; bReadOnlyComparison = !bRightLocal;
+	bRightLocal = bWorkspaceEditable;
 	SetHistorical(Cast<UDataTable>(Args.OldAsset));
 	ComparedRevision = Args.OldRevision.Revision;
 	ComparedLabel = FString::Printf(TEXT("Compared: %s (revision %s)"), *Workspace->GetName(), *ComparedRevision);
 	LeftMetadata = FText::FromString(FString::Printf(TEXT("CL %d | %s"), Args.OldRevision.Changelist, *Args.OldRevision.Date.ToString()));
 	if (!bRightLocal)
 	{
-		RightHistorical.Reset(Args.NewAsset ? DuplicateObject<UDataTable>(Cast<UDataTable>(Args.NewAsset), GetTransientPackage()) : nullptr);
+		RightHistorical.Reset(CreateHistoricalSnapshot(Cast<UDataTable>(Args.NewAsset), Workspace.Get()));
 		RightRevisionNumber = Args.NewRevision.Revision;
 		WorkspaceLabel = FString::Printf(TEXT("Right: %s (revision %s)"), *Workspace->GetName(), *RightRevisionNumber);
 		RightMetadata = FText::FromString(FString::Printf(TEXT("CL %d | %s"), Args.NewRevision.Changelist, *Args.NewRevision.Date.ToString()));
 		RightCommitText = FText::GetEmpty();
-		if (RightHistorical.IsValid())
-		{
-			TMap<UObject*, UObject*> Replacement; Replacement.Add(RightHistorical.Get(), Workspace.Get());
-			FArchiveReplaceObjectRef<UObject> Replace(RightHistorical.Get(), Replacement);
-		}
 	}
 	CacheRevisionHistory();
 	for (const auto& Revision : Revisions)
@@ -138,17 +139,17 @@ void SDataTableHistoryDiff::RefreshComparison()
 	Comparison->SetComparison(FTableDiffModel::Compare(Historical.Get(), RightTable), ComparedLabel, WorkspaceLabel);
 }
 
-bool SDataTableHistoryDiff::CanRevert(FName RowName, const FString& Path) const
+bool SDataTableHistoryDiff::CanRevert(FName RowName, const FTableRestoreTarget& Restore) const
 {
 	FText Error;
-	return !bLoading && bRightLocal && bWorkspaceEditable && FDataTableDiffRevert::CanApply(Historical.Get(), Workspace.Get(), RowName, Path, Error);
+	return !bLoading && bRightLocal && bWorkspaceEditable && FDataTableDiffRevert::CanApply(Historical.Get(), Workspace.Get(), RowName, Restore, Error);
 }
 
-void SDataTableHistoryDiff::Revert(FName RowName, const FString& Path)
+void SDataTableHistoryDiff::Revert(FName RowName, const FTableRestoreTarget& Restore)
 {
-	if (!CanRevert(RowName, Path)) { return; }
+	if (!CanRevert(RowName, Restore)) { return; }
 	FText Error;
-	if (FDataTableDiffRevert::Apply(Historical.Get(), Workspace.Get(), RowName, Path, Error))
+	if (FDataTableDiffRevert::Apply(Historical.Get(), Workspace.Get(), RowName, Restore, Error))
 	{
 		Status = LOCTEXT("Reverted", "Local change restored from the left revision. Undo is available; save the DataTable to persist the edit.");
 	}
@@ -158,7 +159,7 @@ void SDataTableHistoryDiff::Revert(FName RowName, const FString& Path)
 void SDataTableHistoryDiff::SelectLocal()
 {
 	if (!bWorkspaceEditable) { return; }
-	bRightLocal = true; bRightMissing = false; bReadOnlyComparison = false;
+	bRightLocal = true; bRightMissing = false;
 	RightHistorical.Reset(); RightRevision.Reset(); RightRevisionNumber.Reset();
 	WorkspaceLabel = TEXT("Local workspace: ") + Workspace->GetName();
 	RightMetadata = LOCTEXT("LocalMetadata", "Local workspace - current in-memory DataTable");
@@ -172,7 +173,7 @@ void SDataTableHistoryDiff::RefreshHistory()
 	ISourceControlModule& Module = ISourceControlModule::Get();
 	if (!Module.IsEnabled() || !Module.GetProvider().IsAvailable())
 	{
-		Status = LOCTEXT("NoProvider", "Connect source control, then refresh history from either revision menu."); return;
+		Status = LOCTEXT("NoProvider", "Connect source control, then reopen either revision menu to retry."); return;
 	}
 	bFetching = true;
 	Status = LOCTEXT("Fetching", "Fetching depot revision history...");
@@ -185,7 +186,7 @@ void SDataTableHistoryDiff::RefreshHistory()
 void SDataTableHistoryDiff::HistoryReady(const FSourceControlOperationRef& Operation, ECommandResult::Type Result)
 {
 	bFetching = false;
-	if (Result != ECommandResult::Succeeded) { Status = LOCTEXT("HistoryFailed", "Could not fetch history. Refresh the revision list to retry."); return; }
+	if (Result != ECommandResult::Succeeded) { Status = LOCTEXT("HistoryFailed", "Could not fetch history. Reopen either revision menu to retry."); return; }
 	CacheRevisionHistory();
 	if (Revisions.IsEmpty()) { Status = LOCTEXT("NoHistory", "No depot revisions are available for this table."); return; }
 	if (bHasComparison)
@@ -214,21 +215,43 @@ void SDataTableHistoryDiff::CacheRevisionHistory()
 
 void SDataTableHistoryDiff::CompareRevision(FRevisionPtr Revision, bool bRight)
 {
-	if (bLoading) { return; }
+	if (bLoading || !Revision) { return; }
 	bLoading = true; Status = LOCTEXT("LoadingRevision", "Loading DataTable revision...");
-	const TWeakPtr<SWindow> Window = FSlateApplication::Get().FindWidgetWindow(AsShared());
-	const bool bWasActive = Window.IsValid() && FSlateApplication::Get().GetActiveTopLevelWindow() == Window.Pin();
-	RegisterActiveTimer(0.0f, FWidgetActiveTimerDelegate::CreateLambda([this, Revision, bRight, Window, bWasActive](double, float)
+	ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
+	const auto Operation = MakeShared<FGetFile, ESPMode::ThreadSafe>(LexToString(Revision->GetCheckInIdentifier()), Revision->GetRevision(), Revision->GetFilename());
+	if (Provider.CanExecuteOperation(Operation))
 	{
-		LoadRevision(Revision, bRight); bLoading = false;
-		if (bWasActive && FApp::HasFocus()) { if (auto Parent = Window.Pin()) { Parent->BringToFront(true); } }
-		return EActiveTimerReturnType::Stop;
-	}));
+		if (Provider.Execute(Operation, TArray<FString>{}, EConcurrency::Asynchronous,
+			FSourceControlOperationComplete::CreateSP(this, &SDataTableHistoryDiff::RevisionDownloaded, Revision, bRight)) != ECommandResult::Succeeded)
+		{
+			LoadRevision(Revision, bRight, FString());
+		}
+		return;
+	}
+	// Providers without GetFile still expose revision downloads; only asset loading stays on the game thread.
+	const TWeakPtr<SDataTableHistoryDiff> WeakThis = SharedThis(this);
+	Async(EAsyncExecution::ThreadPool, [WeakThis, Revision, bRight]()
+	{
+		FString DownloadedFilename;
+		const bool bDownloaded = Revision->Get(DownloadedFilename, EConcurrency::Asynchronous);
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, Revision, bRight, DownloadedFilename, bDownloaded]()
+		{
+			if (const auto View = WeakThis.Pin()) { View->LoadRevision(Revision, bRight, bDownloaded ? DownloadedFilename : FString()); }
+		});
+	});
 }
 
-void SDataTableHistoryDiff::LoadRevision(FRevisionPtr Revision, bool bRight)
+void SDataTableHistoryDiff::RevisionDownloaded(const FSourceControlOperationRef& Operation, ECommandResult::Type Result, FRevisionPtr Revision, bool bRight)
 {
-	UPackage* Package = DiffUtils::LoadPackageForDiff(Revision);
+	const auto Download = StaticCastSharedRef<FGetFile>(Operation);
+	LoadRevision(Revision, bRight, Result == ECommandResult::Succeeded ? Download->GetOutPackageFilename() : FString());
+}
+
+void SDataTableHistoryDiff::LoadRevision(FRevisionPtr Revision, bool bRight, const FString& DownloadedFilename)
+{
+	bLoading = false;
+	UPackage* Package = DownloadedFilename.IsEmpty() ? nullptr : DiffUtils::LoadPackageForDiff(
+		FPackagePath::FromLocalPath(DownloadedFilename), FPackagePath::FromLocalPath(Revision->GetFilename()));
 	const UDataTable* Table = Package ? Cast<UDataTable>(Package->FindAssetInPackage()) : nullptr;
 	if (!Table) { Status = LOCTEXT("LoadFailed", "Unable to load this revision as a DataTable. Select another revision to retry."); return; }
 	SetRevisionTable(Table, Revision, bRight);
@@ -248,9 +271,7 @@ void SDataTableHistoryDiff::SetRevisionTable(const UDataTable* Table, FRevisionP
 {
 	if (bRight)
 	{
-		RightHistorical.Reset(DuplicateObject<UDataTable>(Table, GetTransientPackage()));
-		TMap<UObject*, UObject*> Replacement; Replacement.Add(RightHistorical.Get(), Workspace.Get());
-		FArchiveReplaceObjectRef<UObject> Replace(RightHistorical.Get(), Replacement);
+		RightHistorical.Reset(CreateHistoricalSnapshot(Table, Workspace.Get()));
 		RightRevision = Revision; RightRevisionNumber = Revision->GetRevision(); bRightLocal = false; bRightMissing = false;
 		WorkspaceLabel = FString::Printf(TEXT("Right: %s (revision %s)"), *Workspace->GetName(), *RightRevisionNumber);
 	}
@@ -259,7 +280,7 @@ void SDataTableHistoryDiff::SetRevisionTable(const UDataTable* Table, FRevisionP
 		SetHistorical(Table); SelectedRevision = Revision; ComparedRevision = Revision->GetRevision();
 		ComparedLabel = FString::Printf(TEXT("Compared: %s (revision %s)"), *Workspace->GetName(), *ComparedRevision);
 	}
-	bHasComparison = true; bUseInitialComparison = false; bReadOnlyComparison = !bRightLocal || !bWorkspaceEditable;
+	bHasComparison = true;
 	UpdateMetadata(Revision, bRight); RefreshComparison();
 	Status = LOCTEXT("ComparisonDirection", "Differences describe changes from the left version to the right version.");
 }
@@ -267,6 +288,12 @@ void SDataTableHistoryDiff::SetRevisionTable(const UDataTable* Table, FRevisionP
 TSharedRef<SWidget> SDataTableHistoryDiff::RevisionMenu(bool bRight)
 {
 	FMenuBuilder Menu(true, nullptr);
+	if (Revisions.IsEmpty() && !bFetching && !bLoading)
+	{
+		RefreshHistory();
+		Menu.AddMenuEntry(LOCTEXT("RetryHistory", "Retry history query"), LOCTEXT("RetryHistoryTip", "Retry the history query, then reopen this menu to see the results."), FSlateIcon(),
+			FUIAction(FExecuteAction::CreateSP(this, &SDataTableHistoryDiff::RefreshHistory), FCanExecuteAction::CreateLambda([this]() { return !bFetching; })));
+	}
 	if (bRight)
 	{
 		Menu.AddMenuEntry(LOCTEXT("LocalVersion", "Local"), LOCTEXT("LocalVersionTip", "Use the current editable workspace table, including unsaved edits."), FSlateIcon(),

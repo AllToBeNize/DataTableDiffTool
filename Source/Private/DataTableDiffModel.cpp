@@ -5,16 +5,16 @@
 
 namespace
 {
-	TSharedPtr<FTableFieldDiff> PreviewProperty(const FProperty* OldProperty, const void* OldValue,
-		const FProperty* NewProperty, const void* NewValue, const FString& Path, const FString& Label,
-		const FString& OldPath, const FString& NewPath);
-
-	void PreviewStruct(const UStruct* OldStruct, const void* OldData, const UStruct* NewStruct,
-		const void* NewData, const FString& Prefix, TArray<TSharedPtr<FTableFieldDiff>>& Children,
-		const FString& OldPrefix, const FString& NewPrefix)
+	struct FTablePropertyPair
 	{
-		TMap<FName, const FProperty*> OldProperties;
-		TMap<FName, const FProperty*> NewProperties;
+		FName Name;
+		const FProperty* Old;
+		const FProperty* New;
+	};
+
+	TArray<FTablePropertyPair> PairProperties(const UStruct* OldStruct, const UStruct* NewStruct)
+	{
+		TMap<FName, const FProperty*> OldProperties, NewProperties;
 		TArray<FName> Names;
 		auto Gather = [&Names](const UStruct* Struct, TMap<FName, const FProperty*>& Properties)
 		{
@@ -25,10 +25,25 @@ namespace
 			}
 		};
 		Gather(NewStruct, NewProperties); Gather(OldStruct, OldProperties);
-		for (FName Name : Names)
+		TArray<FTablePropertyPair> Pairs;
+		Pairs.Reserve(Names.Num());
+		for (FName Name : Names) { Pairs.Add({Name, OldProperties.FindRef(Name), NewProperties.FindRef(Name)}); }
+		return Pairs;
+	}
+
+	TSharedPtr<FTableFieldDiff> PreviewProperty(const FProperty* OldProperty, const void* OldValue,
+		const FProperty* NewProperty, const void* NewValue, const FString& Path, const FString& Label,
+		const FString& OldPath, const FString& NewPath);
+
+	void PreviewStruct(const UStruct* OldStruct, const void* OldData, const UStruct* NewStruct,
+		const void* NewData, const FString& Prefix, TArray<TSharedPtr<FTableFieldDiff>>& Children,
+		const FString& OldPrefix, const FString& NewPrefix)
+	{
+		for (const auto& Pair : PairProperties(OldStruct, NewStruct))
 		{
-			const FProperty* Old = OldProperties.FindRef(Name);
-			const FProperty* New = NewProperties.FindRef(Name);
+			const FName Name = Pair.Name;
+			const FProperty* Old = Pair.Old;
+			const FProperty* New = Pair.New;
 			const int32 Count = FMath::Max(Old ? Old->ArrayDim : 0, New ? New->ArrayDim : 0);
 			for (int32 Index = 0; Index < Count; ++Index)
 			{
@@ -71,8 +86,8 @@ namespace
 	{
 		auto Field = MakeShared<FTableFieldDiff>();
 		Field->Path = Path; Field->Label = Label;
-		Field->RevertPath = OldValue && NewValue && OldPath == NewPath ? OldPath
-			: (OldValue ? OldPath : FString()) + TEXT("|") + (NewValue ? NewPath : FString());
+		Field->RestoreTarget.OldPath = OldValue ? OldPath : FString();
+		Field->RestoreTarget.NewPath = NewValue ? NewPath : FString();
 		Field->OldType = OldProperty ? OldProperty->GetCPPType() : FString();
 		Field->NewType = NewProperty ? NewProperty->GetCPPType() : FString();
 		if (!OldValue) { Field->Kind = ETableDiffKind::Added; }
@@ -132,7 +147,9 @@ namespace
 					Path + Suffix, ElementLabel, OldElement, NewElement);
 				if (OldIndex == INDEX_NONE || NewIndex == INDEX_NONE)
 				{
-					Child->RevertPath += TEXT("|") + NewPath + TEXT("|") + FString::FromInt(InsertIndex);
+					Child->RestoreTarget.ContainerPath = NewPath;
+					Child->RestoreTarget.Index = InsertIndex;
+					Child->RestoreTarget.Operation = OldIndex == INDEX_NONE ? ETableRestoreOperation::DeleteElement : ETableRestoreOperation::InsertElement;
 				}
 				Field->Children.Add(Child);
 			};
@@ -155,26 +172,11 @@ namespace
 	void CompareStruct(const UStruct* OldStruct, const void* OldData, const UStruct* NewStruct,
 		const void* NewData, const FString& Prefix, const FString& DisplayPrefix, TArray<TSharedPtr<FTableFieldDiff>>& Fields)
 	{
-		TMap<FName, const FProperty*> OldProperties;
-		TMap<FName, const FProperty*> NewProperties;
-		TArray<FName> Names;
-		auto Gather = [&Names](const UStruct* Struct, TMap<FName, const FProperty*>& Properties)
+		for (const auto& Pair : PairProperties(OldStruct, NewStruct))
 		{
-			if (Struct)
-			{
-				for (TFieldIterator<FProperty> It(Struct); It; ++It)
-				{
-					Properties.Add(It->GetFName(), *It);
-					Names.AddUnique(It->GetFName());
-				}
-			}
-		};
-		Gather(NewStruct, NewProperties);
-		Gather(OldStruct, OldProperties);
-		for (FName Name : Names)
-		{
-			const FProperty* OldProperty = OldProperties.FindRef(Name);
-			const FProperty* NewProperty = NewProperties.FindRef(Name);
+			const FName Name = Pair.Name;
+			const FProperty* OldProperty = Pair.Old;
+			const FProperty* NewProperty = Pair.New;
 			const int32 Count = FMath::Max(OldProperty ? OldProperty->ArrayDim : 0, NewProperty ? NewProperty->ArrayDim : 0);
 			for (int32 Index = 0; Index < Count; ++Index)
 			{

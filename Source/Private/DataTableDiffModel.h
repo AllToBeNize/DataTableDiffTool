@@ -6,6 +6,18 @@ class UDataTable;
 
 enum class ETableDiffKind : uint8 { Unchanged, Added, Removed, Modified };
 
+enum class ETableRestoreOperation : uint8 { Replace, InsertElement, DeleteElement };
+
+struct FTableRestoreTarget
+{
+	FString OldPath;
+	FString NewPath;
+	FString ContainerPath;
+	int32 Index = INDEX_NONE;
+	ETableRestoreOperation Operation = ETableRestoreOperation::Replace;
+	bool IsRow() const { return OldPath.IsEmpty() && NewPath.IsEmpty() && Operation == ETableRestoreOperation::Replace; }
+};
+
 struct FTableFieldDiff
 {
 	FString Path;
@@ -16,7 +28,7 @@ struct FTableFieldDiff
 	FString NewType;
 	FString Label;
 	// Preview identity and the actual source/destination paths may differ after array alignment.
-	FString RevertPath;
+	FTableRestoreTarget RestoreTarget;
 	TArray<TSharedPtr<FTableFieldDiff>> Children;
 	ETableDiffKind Kind = ETableDiffKind::Unchanged;
 };
@@ -29,7 +41,7 @@ struct FTableRowDiff
 	TArray<TSharedPtr<FTableFieldDiff>> Details;
 };
 
-// Owns only strings, so a diff window cannot retain source-control temporary assets.
+// Owns value snapshots only, so a diff window cannot retain source-control temporary assets.
 struct FTableDiffModel
 {
 	FString OldSchema;

@@ -1,4 +1,5 @@
 #include "DataTableDiffRevert.h"
+#include "DataTableDiffModel.h"
 #include "Engine/DataTable.h"
 #include "DataTableEditorUtils.h"
 #include "ScopedTransaction.h"
@@ -64,26 +65,24 @@ namespace
 		bool bDelete = false;
 	};
 
-	FRestoreTarget ResolveTarget(const UDataTable* Historical, const UDataTable* Workspace, uint8* OldRow, uint8* NewRow, const FString& Path)
+	FRestoreTarget ResolveTarget(const UDataTable* Historical, const UDataTable* Workspace, uint8* OldRow, uint8* NewRow, const FTableRestoreTarget& Restore)
 	{
-		TArray<FString> Parts;
-		Path.ParseIntoArray(Parts, TEXT("|"), false);
 		FRestoreTarget Target;
-		Target.Old = ResolveField(Historical->GetRowStruct(), OldRow, Parts[0]);
-		Target.New = ResolveField(Workspace->GetRowStruct(), NewRow, Parts.Num() > 1 ? Parts[1] : Parts[0]);
-		if (Parts.Num() == 4 && Parts[3].IsNumeric())
+		Target.Old = ResolveField(Historical->GetRowStruct(), OldRow, Restore.OldPath);
+		Target.New = ResolveField(Workspace->GetRowStruct(), NewRow, Restore.NewPath);
+		if (Restore.Operation != ETableRestoreOperation::Replace)
 		{
-			Target.Container = ResolveField(Workspace->GetRowStruct(), NewRow, Parts[2]);
-			Target.Index = FCString::Atoi(*Parts[3]);
-			Target.bInsert = Parts[1].IsEmpty() && Target.Old.Property;
-			Target.bDelete = Parts[0].IsEmpty() && Target.New.Property;
+			Target.Container = ResolveField(Workspace->GetRowStruct(), NewRow, Restore.ContainerPath);
+			Target.Index = Restore.Index;
+			Target.bInsert = Restore.Operation == ETableRestoreOperation::InsertElement && Target.Old.Property;
+			Target.bDelete = Restore.Operation == ETableRestoreOperation::DeleteElement && Target.New.Property;
 		}
 		return Target;
 	}
 }
 
 bool FDataTableDiffRevert::CanApply(const UDataTable* Historical, const UDataTable* Workspace,
-	FName RowName, const FString& FieldPath, FText& Error)
+	FName RowName, const FTableRestoreTarget& Restore, FText& Error)
 {
 	if (!Historical || !Workspace || RowName.IsNone() || Historical == Workspace)
 	{
@@ -91,15 +90,15 @@ bool FDataTableDiffRevert::CanApply(const UDataTable* Historical, const UDataTab
 	}
 	uint8* OldRow = Historical->GetRowMap().FindRef(RowName);
 	uint8* NewRow = Workspace->GetRowMap().FindRef(RowName);
-	if (FieldPath.IsEmpty() && !OldRow && NewRow) { return true; }
-	if (FieldPath.IsEmpty() && OldRow && !NewRow && Historical->GetRowStruct() == Workspace->GetRowStruct()) { return true; }
-	if (FieldPath.IsEmpty() && OldRow && NewRow && Historical->GetRowStruct() == Workspace->GetRowStruct())
+	if (Restore.IsRow() && !OldRow && NewRow) { return true; }
+	if (Restore.IsRow() && OldRow && !NewRow && Historical->GetRowStruct() == Workspace->GetRowStruct()) { return true; }
+	if (Restore.IsRow() && OldRow && NewRow && Historical->GetRowStruct() == Workspace->GetRowStruct())
 	{
 		return !Historical->GetRowStruct()->CompareScriptStruct(OldRow, NewRow, PPF_None);
 	}
-	if (OldRow && NewRow && !FieldPath.IsEmpty())
+	if (OldRow && NewRow && !Restore.IsRow())
 	{
-		const auto Target = ResolveTarget(Historical, Workspace, OldRow, NewRow, FieldPath);
+		const auto Target = ResolveTarget(Historical, Workspace, OldRow, NewRow, Restore);
 		const auto Old = Target.Old; const auto New = Target.New;
 		if (const auto* Array = CastField<FArrayProperty>(Target.Container.Property))
 		{
@@ -118,28 +117,28 @@ bool FDataTableDiffRevert::CanApply(const UDataTable* Historical, const UDataTab
 }
 
 bool FDataTableDiffRevert::Apply(const UDataTable* Historical, UDataTable* Workspace,
-	FName RowName, const FString& FieldPath, FText& Error)
+	FName RowName, const FTableRestoreTarget& Restore, FText& Error)
 {
-	if (!CanApply(Historical, Workspace, RowName, FieldPath, Error)) { return false; }
+	if (!CanApply(Historical, Workspace, RowName, Restore, Error)) { return false; }
 	const FScopedTransaction Transaction(LOCTEXT("RestoreTableChange", " Revert DataTable Change"));
 	uint8* OldRow = Historical->GetRowMap().FindRef(RowName);
-	if (FieldPath.IsEmpty() && !OldRow)
+	if (Restore.IsRow() && !OldRow)
 	{
 		// Use the editor's deletion workflow; the runtime RemoveRow callback may look up a row that was just deleted.
 		const bool bRemoved = FDataTableEditorUtils::RemoveRow(Workspace, RowName);
 		if (bRemoved) { Workspace->MarkPackageDirty(); }
 		return bRemoved;
 	}
-	const auto Info = FieldPath.IsEmpty() ? FDataTableEditorUtils::EDataTableChangeInfo::RowList : FDataTableEditorUtils::EDataTableChangeInfo::RowData;
+	const auto Info = Restore.IsRow() ? FDataTableEditorUtils::EDataTableChangeInfo::RowList : FDataTableEditorUtils::EDataTableChangeInfo::RowData;
 	FDataTableEditorUtils::BroadcastPreChange(Workspace, Info);
 	Workspace->Modify();
-	if (FieldPath.IsEmpty())
+	if (Restore.IsRow())
 	{
 		Workspace->AddRow(RowName, OldRow, Historical->GetRowStruct());
 	}
 	else
 	{
-		const auto Target = ResolveTarget(Historical, Workspace, OldRow, Workspace->GetRowMap().FindRef(RowName), FieldPath);
+		const auto Target = ResolveTarget(Historical, Workspace, OldRow, Workspace->GetRowMap().FindRef(RowName), Restore);
 		if (Target.bInsert || Target.bDelete)
 		{
 			const auto* Array = CastFieldChecked<FArrayProperty>(Target.Container.Property);

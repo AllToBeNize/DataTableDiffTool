@@ -10,6 +10,7 @@ class UDataTable;
 class SBox;
 class ISourceControlRevision;
 class SDataTableDiffView;
+struct FTableRestoreTarget;
 
 class SDataTableHistoryDiff : public SCompoundWidget, public FEditorUndoClient
 {
@@ -27,7 +28,8 @@ private:
 	void RefreshHistory();
 	void HistoryReady(const FSourceControlOperationRef& Operation, ECommandResult::Type Result);
 	void CompareRevision(FRevisionPtr Revision, bool bRight = false);
-	void LoadRevision(FRevisionPtr Revision, bool bRight = false);
+	void LoadRevision(FRevisionPtr Revision, bool bRight, const FString& DownloadedFilename);
+	void RevisionDownloaded(const FSourceControlOperationRef& Operation, ECommandResult::Type Result, FRevisionPtr Revision, bool bRight);
 	TSharedRef<SWidget> RevisionMenu(bool bRight);
 	TSharedRef<SWidget> MakeRevisionControls(bool bRight);
 	void SelectLocal();
@@ -37,8 +39,8 @@ private:
 	void CacheRevisionHistory();
 	void SetHistorical(const UDataTable* Table);
 	void InitializeComparison(const FAssetDiffArgs& Args);
-	bool CanRevert(FName RowName, const FString& Path) const;
-	void Revert(FName RowName, const FString& Path);
+	bool CanRevert(FName RowName, const FTableRestoreTarget& Restore) const;
+	void Revert(FName RowName, const FTableRestoreTarget& Restore);
 	TStrongObjectPtr<UDataTable> Workspace;
 	TStrongObjectPtr<UDataTable> Historical;
 	TStrongObjectPtr<UDataTable> RightHistorical;
@@ -60,8 +62,6 @@ private:
 	bool bFetching = false;
 	bool bLoading = false;
 	bool bHasComparison = false;
-	bool bUseInitialComparison = false;
-	bool bReadOnlyComparison = false;
 	bool bRightMissing = false;
 	bool bRightLocal = true;
 	bool bWorkspaceEditable = true;
