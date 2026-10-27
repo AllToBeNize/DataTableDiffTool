@@ -1,0 +1,45 @@
+# DataTable Diff Tool
+
+独立的 Unreal Engine 编辑器代码插件。当前在 Onimusha 的 UE 5.8.1 下编译验证，不依赖项目模块、脚本插件或自定义引擎接口。
+
+## 第一版保留功能
+
+- 内容浏览器右键单张 DataTable → DataTable Diff Tool；默认比较 Depot 与 Local。
+- DataTable 编辑器顶部 Diff 菜单异步查询历史，选择任意版本与当前数据比较。
+- 接管原生 Diff Against Depot 和历史版本比较；偏好设置中可切换为 UE 原生外部工具。
+- 左右分别选择历史版本，右侧支持 Local；Local 包含尚未保存的内存修改。
+- 显示版本号、提交人、时间和提交说明。
+- 按行名和反射属性比较，显示新增、删除、修改及结构差异；保留原有行序和字段定义顺序。
+- 嵌套结构体递归比较；数组通过最长公共子序列对齐，中间插入或删除不会导致后续元素全部误报。
+- 变更树搜索、字段跳转、属性展开、滚动和列宽同步；下方属性行仅跟随左侧变更项高亮，不接受手动行选择；属性文本只读，支持选中文字复制和自动换行。
+- 属性区复用 UE 原生 Details 的分组与行配色、标准只读文本框和布尔复选框；保留差异文字颜色及左右定位高亮。
+- 右侧为 Local 时，支持恢复整行、结构体、数组、数组元素或字段；支持 Undo / Redo。
+- 恢复仅写回内存并标记待保存，不自动保存资产或执行版本库 revert。
+- Perforce 历史超过 UE 缓存范围时补齐版本号，较旧内容按需下载。
+
+## 暂不包含
+
+- 两张不同 DataTable 的比较窗口、双选比较菜单、两表工具设置；原生 Diff Against 的两表行为交回引擎。
+- 自动合并、Map / Set 元素级展开与恢复、行重命名识别。Map / Set 按整个字段比较和恢复。
+- 自动化测试、测试类型、测试友元声明和测试运行入口。
+- 运行时模块及项目专属资源。
+
+## 安装与使用
+
+将整个 DataTableDiffTool 目录放入工程 Plugins，编译并重启编辑器。插件默认启用。
+
+编辑器偏好设置 → 插件 → DataTable Diff Tool → Revision Comparison Tool，可选择本插件或 Native External Tool。外部工具沿用 UE 的 Text Diff Tool Path。
+
+历史由当前 UE 源代码管理提供者提供，需先连接源代码管理。两个历史版本互比只读；右侧为 Local 时才允许恢复。结构或类型不兼容时禁用相应恢复。
+
+## Onimusha 演示数据
+
+项目资产 `/Game/DataTableDiffTool/DT_DiffExample` 使用项目侧 `Source/Onimusha/DataTableDiffExampleRow.h` 中的结构，不随插件发布，也不被插件引用。
+
+已提交三个历史版本：
+
+1. #1 / CL 42：Sword、Shield、Potion 三行，含结构体、结构体数组、Map 和 Set。
+2. #2 / CL 43：Sword 的价格、属性和嵌套效果值变化，数组中间插入效果；删除 Potion，新增 Bow。
+3. #3 / CL 44：Sword 删除一个效果并修改嵌套数值；Shield 修改启用状态和 Map / Set；新增 Potion。
+
+先比较历史 #1 与 #2，再比较 #2 与 #3；切回右侧 Local 后可按字段或数组元素恢复，并使用 Undo / Redo 检查结果。当前工作区资产为 #3。

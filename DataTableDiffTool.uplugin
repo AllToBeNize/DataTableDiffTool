@@ -1,0 +1,23 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0.0",
+	"FriendlyName": "DataTable Diff Tool",
+	"Description": "Compare DataTable revisions with nested property diffs and selective restore.",
+	"Category": "Editor",
+	"EnabledByDefault": true,
+	"CanContainContent": false,
+	"Modules": [
+		{
+			"Name": "DataTableDiffTool",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "EngineAssetDefinitions",
+			"Enabled": true
+		}
+	]
+}
