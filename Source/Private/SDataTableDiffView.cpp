@@ -222,7 +222,7 @@ void SDataTableDiffView::Construct(const FArguments& Args)
 					.OnTextChanged_Lambda([this](const FText& Text) { Search = Text.ToString(); RefreshJumps(); })]
 				+ SVerticalBox::Slot().AutoHeight()
 				[SNew(STextBlock).Text_Lambda([this]() { return AllJumps.IsEmpty() ? LOCTEXT("NoChanges", "No differences detected") : LOCTEXT("Changes", "Changes - click to navigate"); })]
-				+ SVerticalBox::Slot().FillHeight(1)
+				+ SVerticalBox::Slot().FillHeight(1).Padding(0, 8, 0, 0)
 				[SAssignNew(JumpList, STreeView<TSharedPtr<FTableDiffJump>>).TreeItemsSource(&VisibleJumps)
 					.OnGetChildren_Lambda([](TSharedPtr<FTableDiffJump> Jump, TArray<TSharedPtr<FTableDiffJump>>& Children) { Children = Jump->FilteredChildren; })
 					.OnGenerateRow(this, &SDataTableDiffView::GenerateJump).OnSelectionChanged(this, &SDataTableDiffView::JumpTo)
