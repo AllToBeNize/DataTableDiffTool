@@ -14,6 +14,8 @@ namespace
 	{
 		const FProperty* Property = nullptr;
 		void* Value = nullptr;
+		const FProperty* KeyProperty = nullptr;
+		void* Key = nullptr;
 	};
 
 	FResolvedTableField ResolveField(const UStruct* Struct, void* Data, const FString& Path)
@@ -41,6 +43,18 @@ namespace
 				FScriptArrayHelper Helper(Array, Array->ContainerPtrToValuePtr<void>(Data));
 				if (ArrayIndex < 0 || ArrayIndex >= Helper.Num()) { return {}; }
 				Result = {Array->Inner, Helper.GetRawPtr(ArrayIndex)};
+			}
+			else if (const auto* Map = CastField<FMapProperty>(Property); Map && bIndexed)
+			{
+				FScriptMapHelper Helper(Map, Map->ContainerPtrToValuePtr<void>(Data));
+				if (!Helper.IsValidIndex(ArrayIndex)) { return {}; }
+				Result = {Map->ValueProp, Helper.GetValuePtr(ArrayIndex), Map->KeyProp, Helper.GetKeyPtr(ArrayIndex)};
+			}
+			else if (const auto* Set = CastField<FSetProperty>(Property); Set && bIndexed)
+			{
+				FScriptSetHelper Helper(Set, Set->ContainerPtrToValuePtr<void>(Data));
+				if (!Helper.IsValidIndex(ArrayIndex)) { return {}; }
+				Result = {Set->ElementProp, Helper.GetElementPtr(ArrayIndex)};
 			}
 			else
 			{
@@ -106,6 +120,24 @@ bool FDataTableDiffRevert::CanApply(const UDataTable* Historical, const UDataTab
 			if (Target.Index >= 0 && ((Target.bInsert && Target.Index <= Count && Array->Inner->SameType(Old.Property))
 				|| (Target.bDelete && Target.Index < Count && Array->Inner->SameType(New.Property)))) { return true; }
 		}
+		if (const auto* Map = CastField<FMapProperty>(Target.Container.Property))
+		{
+			FScriptMapHelper Helper(Map, Target.Container.Value);
+			if (Restore.Operation == ETableRestoreOperation::InsertMapEntry && Old.KeyProperty && Old.Property
+				&& Map->KeyProp->SameType(Old.KeyProperty) && Map->ValueProp->SameType(Old.Property)
+				&& Helper.FindMapIndexWithKey(Old.Key) == INDEX_NONE) { return true; }
+			if (Restore.Operation == ETableRestoreOperation::DeleteMapEntry && Helper.IsValidIndex(Target.Index)
+				&& New.KeyProperty && Map->KeyProp->SameType(New.KeyProperty) && Map->ValueProp->SameType(New.Property)) { return true; }
+		}
+		if (const auto* Set = CastField<FSetProperty>(Target.Container.Property))
+		{
+			FScriptSetHelper Helper(Set, Target.Container.Value);
+			if (Restore.Operation == ETableRestoreOperation::InsertSetElement && Old.Property && Set->ElementProp->SameType(Old.Property)
+				&& Helper.FindElementIndex(Old.Value) == INDEX_NONE) { return true; }
+			if (Restore.Operation == ETableRestoreOperation::DeleteSetElement && Helper.IsValidIndex(Target.Index)
+				&& New.Property && Set->ElementProp->SameType(New.Property)) { return true; }
+		}
+		if (Restore.Operation != ETableRestoreOperation::Replace) { return false; }
 		if (Old.Property && New.Property && Old.Property->SameType(New.Property))
 		{
 			if (!Old.Property->Identical(Old.Value, New.Value, PPF_None)) { return true; }
@@ -139,15 +171,29 @@ bool FDataTableDiffRevert::Apply(const UDataTable* Historical, UDataTable* Works
 	else
 	{
 		const auto Target = ResolveTarget(Historical, Workspace, OldRow, Workspace->GetRowMap().FindRef(RowName), Restore);
-		if (Target.bInsert || Target.bDelete)
+		if (Restore.Operation != ETableRestoreOperation::Replace)
 		{
-			const auto* Array = CastFieldChecked<FArrayProperty>(Target.Container.Property);
-			FScriptArrayHelper Helper(Array, Target.Container.Value);
-			if (Target.bDelete) { Helper.RemoveValues(Target.Index, 1); }
-			else
+			if (const auto* Array = CastField<FArrayProperty>(Target.Container.Property))
 			{
-				Helper.InsertValues(Target.Index, 1);
-				Array->Inner->CopySingleValue(Helper.GetRawPtr(Target.Index), Target.Old.Value);
+				FScriptArrayHelper Helper(Array, Target.Container.Value);
+				if (Target.bDelete) { Helper.RemoveValues(Target.Index, 1); }
+				else
+				{
+					Helper.InsertValues(Target.Index, 1);
+					Array->Inner->CopySingleValue(Helper.GetRawPtr(Target.Index), Target.Old.Value);
+				}
+			}
+			else if (const auto* Map = CastField<FMapProperty>(Target.Container.Property))
+			{
+				FScriptMapHelper Helper(Map, Target.Container.Value);
+				if (Restore.Operation == ETableRestoreOperation::DeleteMapEntry) { Helper.RemoveAt(Target.Index); }
+				else { Helper.AddPair(Target.Old.Key, Target.Old.Value); }
+			}
+			else if (const auto* Set = CastField<FSetProperty>(Target.Container.Property))
+			{
+				FScriptSetHelper Helper(Set, Target.Container.Value);
+				if (Restore.Operation == ETableRestoreOperation::DeleteSetElement) { Helper.RemoveAt(Target.Index); }
+				else { Helper.AddElement(Target.Old.Value); }
 			}
 		}
 		else { Target.New.Property->CopySingleValue(Target.New.Value, Target.Old.Value); }

@@ -6,7 +6,7 @@ class UDataTable;
 
 enum class ETableDiffKind : uint8 { Unchanged, Added, Removed, Modified };
 
-enum class ETableRestoreOperation : uint8 { Replace, InsertElement, DeleteElement };
+enum class ETableRestoreOperation : uint8 { Replace, InsertElement, DeleteElement, InsertMapEntry, DeleteMapEntry, InsertSetElement, DeleteSetElement };
 
 struct FTableRestoreTarget
 {

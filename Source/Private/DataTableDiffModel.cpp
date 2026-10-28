@@ -80,6 +80,86 @@ namespace
 		return DisplayValue(Property, Value);
 	}
 
+	struct FKeyedTableElement
+	{
+		int32 Index;
+		const void* Identity;
+		const void* Value;
+	};
+
+	void PreviewKeyedContainer(const FProperty* OldProperty, const void* OldValue, const FProperty* NewProperty, const void* NewValue,
+		const FString& OldPath, const FString& NewPath, const TSharedPtr<FTableFieldDiff>& Field)
+	{
+		const bool bMap = CastField<FMapProperty>(NewProperty ? NewProperty : OldProperty) != nullptr;
+		auto Gather = [bMap](const FProperty* Property, const void* Value, const FProperty*& IdentityProperty, const FProperty*& ValueProperty)
+		{
+			TArray<FKeyedTableElement> Elements;
+			if (!Property) { return Elements; }
+			if (bMap)
+			{
+				const auto* Map = CastFieldChecked<FMapProperty>(Property);
+				IdentityProperty = Map->KeyProp; ValueProperty = Map->ValueProp;
+				if (!Value) { return Elements; }
+				FScriptMapHelper Helper(Map, Value);
+				for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+				{
+					if (Helper.IsValidIndex(Index)) { Elements.Add({Index, Helper.GetKeyPtr(Index), Helper.GetValuePtr(Index)}); }
+				}
+			}
+			else
+			{
+				const auto* Set = CastFieldChecked<FSetProperty>(Property);
+				IdentityProperty = Set->ElementProp; ValueProperty = Set->ElementProp;
+				if (!Value) { return Elements; }
+				FScriptSetHelper Helper(Set, Value);
+				for (int32 Index = 0; Index < Helper.GetMaxIndex(); ++Index)
+				{
+					if (Helper.IsValidIndex(Index)) { Elements.Add({Index, Helper.GetElementPtr(Index), Helper.GetElementPtr(Index)}); }
+				}
+			}
+			return Elements;
+		};
+		const FProperty* OldIdentity = nullptr; const FProperty* OldElement = nullptr;
+		const FProperty* NewIdentity = nullptr; const FProperty* NewElement = nullptr;
+		const auto OldElements = Gather(OldProperty, OldValue, OldIdentity, OldElement);
+		const auto NewElements = Gather(NewProperty, NewValue, NewIdentity, NewElement);
+		if (OldValue) { Field->OldValue = FString::Printf(TEXT("%d %s"), OldElements.Num(), bMap ? TEXT("Map entries") : TEXT("Set elements")); }
+		if (NewValue) { Field->NewValue = FString::Printf(TEXT("%d %s"), NewElements.Num(), bMap ? TEXT("Map entries") : TEXT("Set elements")); }
+		auto AddElement = [&](const FKeyedTableElement* Old, const FKeyedTableElement* New)
+		{
+			const FString Label = PreviewValue(New ? NewIdentity : OldIdentity, New ? New->Identity : Old->Identity);
+			const FString OldElementPath = Old ? OldPath + FString::Printf(TEXT("[%d]"), Old->Index) : FString();
+			const FString NewElementPath = New ? NewPath + FString::Printf(TEXT("[%d]"), New->Index) : FString();
+			auto Child = PreviewProperty(OldElement, Old ? Old->Value : nullptr, NewElement, New ? New->Value : nullptr,
+				Field->Path + FString::Printf(TEXT("[%d]"), Field->Children.Num()), Label, OldElementPath, NewElementPath);
+			if (!Old || !New)
+			{
+				Child->RestoreTarget.ContainerPath = NewPath;
+				Child->RestoreTarget.Index = New ? New->Index : INDEX_NONE;
+				Child->RestoreTarget.Operation = bMap
+					? (Old ? ETableRestoreOperation::InsertMapEntry : ETableRestoreOperation::DeleteMapEntry)
+					: (Old ? ETableRestoreOperation::InsertSetElement : ETableRestoreOperation::DeleteSetElement);
+			}
+			Field->Children.Add(Child);
+		};
+		TSet<int32> Matched;
+		TMap<int32, const FKeyedTableElement*> OldByIndex;
+		for (const auto& Old : OldElements) { OldByIndex.Add(Old.Index, &Old); }
+		for (const auto& New : NewElements)
+		{
+			int32 OldIndex = INDEX_NONE;
+			if (OldValue)
+			{
+				if (bMap) { OldIndex = FScriptMapHelper(CastFieldChecked<FMapProperty>(OldProperty), OldValue).FindMapIndexWithKey(New.Identity); }
+				else { OldIndex = FScriptSetHelper(CastFieldChecked<FSetProperty>(OldProperty), OldValue).FindElementIndex(New.Identity); }
+			}
+			const auto* Old = OldByIndex.FindRef(OldIndex);
+			if (Old) { Matched.Add(Old->Index); }
+			AddElement(Old, &New);
+		}
+		for (const auto& Old : OldElements) { if (!Matched.Contains(Old.Index)) { AddElement(&Old, nullptr); } }
+	}
+
 	TSharedPtr<FTableFieldDiff> PreviewProperty(const FProperty* OldProperty, const void* OldValue,
 		const FProperty* NewProperty, const void* NewValue, const FString& Path, const FString& Label,
 		const FString& OldPath, const FString& NewPath)
@@ -161,6 +241,10 @@ namespace
 				while (B < Anchor.Y) { AddElement(INDEX_NONE, B, B); ++B; }
 				if (Anchor.X < OldCount) { AddElement(A, B, B); ++A; ++B; }
 			}
+		}
+		else if (bCompatible && (CastField<FMapProperty>(Property) || CastField<FSetProperty>(Property)))
+		{
+			PreviewKeyedContainer(OldProperty, OldValue, NewProperty, NewValue, OldPath, NewPath, Field);
 		}
 		else
 		{
