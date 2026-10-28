@@ -289,6 +289,10 @@ TSharedRef<SWidget> SDataTableDiffView::MakePane(bool bLocal)
 							.ExternalScrollbar(TableScrollBar).ConsumeMouseWheel(EConsumeMouseWheel::Always)
 							.OnGenerateRow(this, &SDataTableDiffView::GenerateTableRow, bLocal)
 							.OnSelectionChanged(this, &SDataTableDiffView::SelectTableRow)
+							.OnMouseButtonClick_Lambda([this](TSharedPtr<FTableRowDiff> Row)
+							{
+								if (SelectedRow == Row && !SelectedField.IsEmpty()) { SelectTableRow(Row, ESelectInfo::OnMouseClick); }
+							})
 							.OnListViewScrolled(this, &SDataTableDiffView::SyncScroll, bLocal)
 							.SelectionMode(ESelectionMode::Single).HeaderRow(SAssignNew(Header, SHeaderRow))
 					]
@@ -404,12 +408,21 @@ void SDataTableDiffView::RefreshJumps()
 
 void SDataTableDiffView::JumpTo(TSharedPtr<FTableDiffJump> Jump, ESelectInfo::Type SelectInfo)
 {
-	if (Jump) { FocusRow(Jump->Row, Jump->FieldPath); }
+	if (!bSyncing && Jump) { FocusRow(Jump->Row, Jump->FieldPath); }
 }
 
 void SDataTableDiffView::SelectTableRow(TSharedPtr<FTableRowDiff> Row, ESelectInfo::Type SelectInfo)
 {
-	if (!bSyncing && Row) { FocusRow(Row, FString()); }
+	if (bSyncing || !Row) { return; }
+	FocusRow(Row, FString());
+	TGuardValue<bool> Guard(bSyncing, true);
+	const auto* Jump = VisibleJumps.FindByPredicate([&Row](const auto& Item) { return Item->Row == Row; });
+	JumpList->ClearSelection();
+	if (Jump)
+	{
+		JumpList->SetSelection(*Jump, ESelectInfo::Direct);
+		JumpList->RequestScrollIntoView(*Jump);
+	}
 }
 
 void SDataTableDiffView::FocusRow(TSharedPtr<FTableRowDiff> Row, const FString& FieldPath)
