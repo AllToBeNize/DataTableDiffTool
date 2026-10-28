@@ -35,6 +35,7 @@ public:
 		SLATE_EVENT(FRevertChange, OnRevertChange)
 	SLATE_END_ARGS()
 	void Construct(const FArguments& Args);
+	virtual ~SDataTableDiffView() override;
 	void SetComparison(FTableDiffModel InModel, const FString& OldLabel, const FString& NewLabel);
 private:
 	TSharedRef<SWidget> MakePane(bool bLocal);
@@ -55,12 +56,17 @@ private:
 	void ResizeColumn(float Width, FString Path);
 	float ShareDetailHeight(const FString& Path, bool bLocal, float Height);
 	void ResizePane(float Fraction);
+	void LoadLayout();
+	void SaveLayout() const;
+	void ResizeDetailColumn(float Fraction);
 	FTableDiffModel Model;
 	TArray<FString> Columns;
 	TMap<FString, float> ColumnWidths;
 	TMap<FString, FVector2D> DetailHeights;
 	TSet<FString> ExpandedPaths;
 	float TableFraction = 0.65f;
+	float DetailNameFraction = 0.4f;
+	float MainFractions[3] = {0.2f, 0.4f, 0.4f};
 	TArray<TSharedPtr<FTableDiffJump>> AllJumps;
 	TArray<TSharedPtr<FTableDiffJump>> VisibleJumps;
 	TArray<TSharedPtr<FTableFieldDiff>> SelectedFields;

@@ -1,6 +1,7 @@
 #include "SDataTableDiffView.h"
 #include "Widgets/Input/SSearchBox.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Images/SImage.h"
 #include "Styling/StyleColors.h"
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "Widgets/Input/SCheckBox.h"
@@ -13,6 +14,7 @@
 #include "Widgets/Views/SHeaderRow.h"
 #include "Widgets/Views/SExpanderArrow.h"
 #include "Styling/AppStyle.h"
+#include "Misc/ConfigCacheIni.h"
 
 #define LOCTEXT_NAMESPACE "DataTableDiffTool"
 
@@ -22,6 +24,8 @@ namespace
 	constexpr float FieldWidth = 180;
 	const FLinearColor FocusedBackground(0.2f, 0.4f, 0.75f, 0.45f);
 	const FString RowWidthKey = TEXT("@RowName");
+	const TCHAR* LayoutSection = TEXT("DataTableDiffTool.Layout");
+	const TCHAR* ColumnSection = TEXT("DataTableDiffTool.Columns");
 	FSlateColor DiffColor(ETableDiffKind Kind)
 	{
 		switch (Kind)
@@ -200,6 +204,7 @@ namespace
 
 void SDataTableDiffView::Construct(const FArguments& Args)
 {
+	LoadLayout();
 	CanRevertChange = Args._OnCanRevertChange; RevertChange = Args._OnRevertChange;
 	LeftControls = Args._LeftControls; RightControls = Args._RightControls;
 	ChildSlot
@@ -213,8 +218,9 @@ void SDataTableDiffView::Construct(const FArguments& Args)
 		})]
 		+ SVerticalBox::Slot().FillHeight(1).Padding(8)
 		[
-			SNew(SSplitter)
-			+ SSplitter::Slot().Value(0.2f)
+			SNew(SSplitter).OnSplitterFinishedResizing(this, &SDataTableDiffView::SaveLayout)
+			+ SSplitter::Slot().Value_Lambda([this]() { return MainFractions[0]; })
+				.OnSlotResized_Lambda([this](float Fraction) { MainFractions[0] = Fraction; })
 			[
 				SNew(SVerticalBox)
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 0, 4, 8)
@@ -228,8 +234,10 @@ void SDataTableDiffView::Construct(const FArguments& Args)
 					.OnGenerateRow(this, &SDataTableDiffView::GenerateJump).OnSelectionChanged(this, &SDataTableDiffView::JumpTo)
 					.SelectionMode(ESelectionMode::Single)]
 			]
-			+ SSplitter::Slot().Value(0.4f)[MakePane(false)]
-			+ SSplitter::Slot().Value(0.4f)[MakePane(true)]
+			+ SSplitter::Slot().Value_Lambda([this]() { return MainFractions[1]; })
+				.OnSlotResized_Lambda([this](float Fraction) { MainFractions[1] = Fraction; })[MakePane(false)]
+			+ SSplitter::Slot().Value_Lambda([this]() { return MainFractions[2]; })
+				.OnSlotResized_Lambda([this](float Fraction) { MainFractions[2] = Fraction; })[MakePane(true)]
 		]
 	];
 	SetComparison(Args._Model, Args._OldLabel, Args._NewLabel);
@@ -267,6 +275,7 @@ TSharedRef<SWidget> SDataTableDiffView::MakePane(bool bLocal)
 		+ SVerticalBox::Slot().FillHeight(1)
 		[
 			SAssignNew(Splitter, SSplitter).Orientation(Orient_Vertical)
+				.OnSplitterFinishedResizing(this, &SDataTableDiffView::SaveLayout)
 			+ SSplitter::Slot().Value_Lambda([this]() { return TableFraction; })
 				.OnSlotResized(this, &SDataTableDiffView::ResizePane)
 			[
@@ -324,8 +333,12 @@ TSharedRef<SWidget> SDataTableDiffView::MakePane(bool bLocal)
 						.OnGenerateRow(this, &SDataTableDiffView::GenerateDetailRow, bLocal).SelectionMode(ESelectionMode::None)
 						.OnTreeViewScrolled(this, &SDataTableDiffView::SyncDetailScroll, bLocal)
 						.HeaderRow(SNew(SHeaderRow)
-							+ SHeaderRow::Column(TEXT("Property")).DefaultLabel(LOCTEXT("Property", "Property")).FillWidth(0.4f)
-							+ SHeaderRow::Column(TEXT("Value")).DefaultLabel(LOCTEXT("Value", "Value")).FillWidth(0.6f))
+							+ SHeaderRow::Column(TEXT("Property")).DefaultLabel(LOCTEXT("Property", "Property"))
+								.FillWidth_Lambda([this]() { return DetailNameFraction; })
+								.OnWidthChanged(this, &SDataTableDiffView::ResizeDetailColumn)
+							+ SHeaderRow::Column(TEXT("Value")).DefaultLabel(LOCTEXT("Value", "Value"))
+								.FillWidth_Lambda([this]() { return 1.0f - DetailNameFraction; })
+								.OnWidthChanged_Lambda([this](float Fraction) { ResizeDetailColumn(1.0f - Fraction); }))
 					]
 					+ SHorizontalBox::Slot().AutoWidth().Padding(2, 0)[DetailScrollBar]
 				]
@@ -537,8 +550,12 @@ TSharedRef<ITableRow> SDataTableDiffView::GenerateJump(TSharedPtr<FTableDiffJump
 			+ SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
 			[SNew(STextBlock).ColorAndOpacity(DiffColor(Jump->Kind)).Text(Label).ToolTipText(Label).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(6, 0, 0, 0)
-			[SNew(SButton).Text(LOCTEXT("RevertInline", "Revert")).ContentPadding(FMargin(6, 2))
-				.Visibility_Lambda([this]() { return RevertChange.IsBound() ? EVisibility::Visible : EVisibility::Collapsed; })
+			[SNew(SButton).ButtonStyle(FAppStyle::Get(), "SimpleButton").ContentPadding(0).IsFocusable(false)
+				.Visibility_Lambda([this, Jump]()
+				{
+					if (!RevertChange.IsBound()) { return EVisibility::Collapsed; }
+					return JumpList && JumpList->IsItemSelected(Jump) ? EVisibility::Visible : EVisibility::Hidden;
+				})
 				.ToolTipText_Lambda([this, Jump]()
 				{
 					return CanRevertJump(Jump)
@@ -546,7 +563,8 @@ TSharedRef<ITableRow> SDataTableDiffView::GenerateJump(TSharedPtr<FTableDiffJump
 						: LOCTEXT("RevertLocalOnlyTip", "Revert is only supported when the right version is Local.");
 				})
 				.IsEnabled_Lambda([this, Jump]() { return CanRevertJump(Jump); })
-				.OnClicked_Lambda([this, Jump]() { return RevertJump(Jump); })]);
+				.OnClicked_Lambda([this, Jump]() { return RevertJump(Jump); })
+				[SNew(SImage).Image(FAppStyle::GetBrush("PropertyWindow.DiffersFromDefault")).DesiredSizeOverride(FVector2D(16, 16))]]);
 	return TreeRow;
 }
 
@@ -566,6 +584,7 @@ float SDataTableDiffView::TableWidth() const
 void SDataTableDiffView::ResizeColumn(float Width, FString Path)
 {
 	ColumnWidths.Add(Path, FMath::Max(60.0f, Width));
+	GConfig->SetFloat(ColumnSection, *Path, ColumnWidths[Path], GEditorPerProjectIni);
 	LocalHeader->Invalidate(EInvalidateWidgetReason::Layout); DepotHeader->Invalidate(EInvalidateWidgetReason::Layout);
 	Invalidate(EInvalidateWidgetReason::Layout);
 }
@@ -586,6 +605,58 @@ void SDataTableDiffView::ResizePane(float Fraction)
 {
 	TableFraction = FMath::Clamp(Fraction, 0.1f, 0.9f);
 	LocalSplitter->Invalidate(EInvalidateWidgetReason::Layout); DepotSplitter->Invalidate(EInvalidateWidgetReason::Layout);
+}
+
+SDataTableDiffView::~SDataTableDiffView()
+{
+	SaveLayout();
+}
+
+void SDataTableDiffView::LoadLayout()
+{
+	auto LoadFraction = [](const TCHAR* Key, float& Value)
+	{
+		float Saved;
+		if (GConfig->GetFloat(LayoutSection, Key, Saved, GEditorPerProjectIni) && FMath::IsFinite(Saved))
+		{
+			Value = FMath::Clamp(Saved, 0.05f, 0.95f);
+		}
+	};
+	LoadFraction(TEXT("TableFraction"), TableFraction);
+	LoadFraction(TEXT("DetailNameFraction"), DetailNameFraction);
+	for (int32 Index = 0; Index < 3; ++Index)
+	{
+		LoadFraction(*FString::Printf(TEXT("MainFraction%d"), Index), MainFractions[Index]);
+	}
+	TArray<FString> SavedColumns;
+	GConfig->GetSection(ColumnSection, SavedColumns, GEditorPerProjectIni);
+	for (const FString& Entry : SavedColumns)
+	{
+		FString Path, Value;
+		float Width;
+		if (Entry.Split(TEXT("="), &Path, &Value) && GConfig->GetFloat(ColumnSection, *Path, Width, GEditorPerProjectIni) && FMath::IsFinite(Width))
+		{
+			ColumnWidths.Add(Path, FMath::Max(60.0f, Width));
+		}
+	}
+}
+
+void SDataTableDiffView::SaveLayout() const
+{
+	GConfig->SetFloat(LayoutSection, TEXT("TableFraction"), TableFraction, GEditorPerProjectIni);
+	GConfig->SetFloat(LayoutSection, TEXT("DetailNameFraction"), DetailNameFraction, GEditorPerProjectIni);
+	for (int32 Index = 0; Index < 3; ++Index)
+	{
+		GConfig->SetFloat(LayoutSection, *FString::Printf(TEXT("MainFraction%d"), Index), MainFractions[Index], GEditorPerProjectIni);
+	}
+	GConfig->Flush(false, GEditorPerProjectIni);
+}
+
+void SDataTableDiffView::ResizeDetailColumn(float Fraction)
+{
+	DetailNameFraction = FMath::Clamp(Fraction, 0.1f, 0.9f);
+	GConfig->SetFloat(LayoutSection, TEXT("DetailNameFraction"), DetailNameFraction, GEditorPerProjectIni);
+	LocalDetails->Invalidate(EInvalidateWidgetReason::Layout); DepotDetails->Invalidate(EInvalidateWidgetReason::Layout);
 }
 
 #undef LOCTEXT_NAMESPACE
