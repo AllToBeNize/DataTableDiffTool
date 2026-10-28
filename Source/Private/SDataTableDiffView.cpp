@@ -539,7 +539,12 @@ TSharedRef<ITableRow> SDataTableDiffView::GenerateJump(TSharedPtr<FTableDiffJump
 			+ SHorizontalBox::Slot().AutoWidth().Padding(6, 0, 0, 0)
 			[SNew(SButton).Text(LOCTEXT("RevertInline", "Revert")).ContentPadding(FMargin(6, 2))
 				.Visibility_Lambda([this]() { return RevertChange.IsBound() ? EVisibility::Visible : EVisibility::Collapsed; })
-				.ToolTipText(LOCTEXT("RevertInlineTip", "Restore this change from the compared revision. Supports Undo; save the DataTable to persist the edit."))
+				.ToolTipText_Lambda([this, Jump]()
+				{
+					return CanRevertJump(Jump)
+						? LOCTEXT("RevertInlineTip", "Restore this change from the compared revision. Supports Undo; save the DataTable to persist the edit.")
+						: LOCTEXT("RevertLocalOnlyTip", "Revert is only supported when the right version is Local.");
+				})
 				.IsEnabled_Lambda([this, Jump]() { return CanRevertJump(Jump); })
 				.OnClicked_Lambda([this, Jump]() { return RevertJump(Jump); })]);
 	return TreeRow;

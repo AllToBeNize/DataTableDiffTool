@@ -9,3 +9,4 @@ struct FAssetDiffArgs;
 void OpenDataTableDiffTool(UDataTable* Table, TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Revision = nullptr);
 void OpenDataTableDiffTool(const FAssetDiffArgs& Args);
 void RegisterDataTableDiffToolbar();
+void UnregisterDataTableDiffTab();

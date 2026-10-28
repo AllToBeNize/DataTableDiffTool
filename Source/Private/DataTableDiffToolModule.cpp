@@ -21,6 +21,7 @@ public:
 	}
 	virtual void ShutdownModule() override
 	{
+		UnregisterDataTableDiffTab();
 		RemoveDataTableDiffRouter();
 		if (UToolMenus::IsToolMenuUIEnabled())
 		{

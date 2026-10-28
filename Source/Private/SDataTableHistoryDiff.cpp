@@ -51,7 +51,8 @@ void SDataTableHistoryDiff::Construct(const FArguments& Args)
 	[
 		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight().Padding(8, 4)
-		[SNew(STextBlock).AutoWrapText(true).Text_Lambda([this]() { return Status; })]
+		[SNew(STextBlock).AutoWrapText(true).Text_Lambda([this]() { return Status; })
+			.Visibility_Lambda([this]() { return Status.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible; })]
 		+ SVerticalBox::Slot().FillHeight(1)
 		[SAssignNew(Comparison, SDataTableDiffView)
 			.LeftControls(MakeRevisionControls(false)).RightControls(MakeRevisionControls(true))
@@ -117,7 +118,7 @@ void SDataTableHistoryDiff::InitializeComparison(const FAssetDiffArgs& Args)
 		if (Revision->GetRevision() == ComparedRevision) { SelectedRevision = Revision; UpdateMetadata(Revision, false); }
 		if (!bRightLocal && Revision->GetRevision() == RightRevisionNumber) { RightRevision = Revision; UpdateMetadata(Revision, true); }
 	}
-	Status = LOCTEXT("ComparisonDirection", "Differences describe changes from the left version to the right version.");
+	Status = FText::GetEmpty();
 	RefreshComparison();
 }
 
@@ -282,7 +283,7 @@ void SDataTableHistoryDiff::SetRevisionTable(const UDataTable* Table, FRevisionP
 	}
 	bHasComparison = true;
 	UpdateMetadata(Revision, bRight); RefreshComparison();
-	Status = LOCTEXT("ComparisonDirection", "Differences describe changes from the left version to the right version.");
+	Status = FText::GetEmpty();
 }
 
 TSharedRef<SWidget> SDataTableHistoryDiff::RevisionMenu(bool bRight)
