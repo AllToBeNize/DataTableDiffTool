@@ -2,7 +2,7 @@
 
 Publisher / 发布者：Meowoods · Support / 联系方式：[2184196946@qq.com](mailto:2184196946@qq.com)
 
-独立的 Unreal Engine 编辑器代码插件，不依赖项目模块、脚本插件或项目资源。当前版本在 Windows 的定制 UE 5.8.1 下编译验证；原版引擎版本及其他平台尚未验证。
+独立的 Unreal Engine 编辑器代码插件，不依赖项目模块、脚本插件或项目资源。
 
 ## 功能
 
@@ -52,4 +52,4 @@ Use the reset arrow beside the selected change or a changed Details row to resto
 
 To use the native external tool, open **Editor Preferences > Plugins > DataTable Diff Tool** and set **Revision Comparison Tool** to **Native External Tool (e.g. P4Merge)**. Configure the executable under **Loading & Saving > Text Diff Tool Path**. This immediately affects native revision-comparison entry points. The explicit **DataTable Diff Tool** command still opens this plugin.
 
-History and revision downloads use Unreal's source-control provider interfaces. Perforce has been tested; other providers depend on their history and download implementations and have not been validated. This version has been built and used on Windows with a custom UE 5.8.1 engine. Stock launcher engine versions and other platforms have not been validated.
+History and revision downloads use Unreal's source-control provider interfaces. Perforce has been tested; other providers depend on their history and download implementations.

@@ -10,7 +10,6 @@
 | Version | 1.0.0 |
 | Module | DataTableDiffTool (Editor) |
 | Suggested tags | DataTable, Diff, Editor Tools, Source Control, Perforce |
-| Verified environment | Windows, custom UE 5.8.1; Perforce |
 | Dependencies | EngineAssetDefinitions and built-in Unreal editor modules |
 | Content | Source and documentation; no runtime module or bundled assets |
 
@@ -55,12 +54,25 @@ In **Editor Preferences > Plugins > DataTable Diff Tool**, set **Revision Compar
 ## Before publishing
 
 - Publisher: Meowoods. Support: 2184196946@qq.com. Match these values in the seller account; confirm the documentation URL, price and license selections before publishing.
-- Build and test against every stock Unreal Engine version and platform selected on the listing. A custom UE build does not establish stock-version support.
+- Build and test against each Unreal Engine version and platform selected on the listing.
 - Run a clean plugin packaging build for each supported engine; verify history, restore, Undo / Redo and layout persistence after restarting that engine.
 - Select a plugin-browser icon if desired; none is bundled in this source snapshot.
 - Project-specific demonstration DataTables and their C++ row types are not distributed with the plugin. Screenshots show illustrative project data.
 - Mask private source-control names and metadata before publishing screenshots. Format-converted screenshots retain their original visible content.
 - Source ZIP snapshots omit Binaries, Intermediate, local user configuration and project assets; they are preparation snapshots rather than engine-certified packages.
+
+## 提交材料清单（2026-10-29 核对）
+
+1. 发布者账号：完成发布者资料、Creator Code、Trader Verification，以及所在地区要求的税务和收款设置。
+2. 商品信息：名称、描述、分类、标签、许可和美元基础价格；检查平台必填项。
+3. UE 技术信息：支持的引擎版本、开发及目标平台、模块类型、依赖、使用步骤和文档入口。
+4. 插件交付：至少一个代码模块，`.uplugin`、`Source` 及适用的配置和内容；按官方目录要求检查最终包，将单个插件打成 ZIP。
+5. 文件链接：提供无需登录或申请权限即可下载 ZIP 的 Project File Link，保留到商品上线；有密码时在版本说明填写。
+6. 展示媒体：缩略图，加至少一个图库图片、3D 预览或视频。本插件可以使用封面和操作截图，无需专门制作 3D 预览。
+7. 图库图片：PNG / JPEG，至少 1920 × 1080，单张小于 3 MB，图库全部 2D 图片合计小于 25 MB。
+8. 提交流程：Publish > Listings，新建或编辑商品，添加 Unreal Engine 文件及媒体，补全必填项后 Submit for review；选择审核通过后自动或手动发布。
+
+当前已备妥：发布者、邮箱、描述、FAQ、使用说明、图片和源码快照。仍需确定价格及上架的 UE 版本，完成对应构建和最终包目录检查，并提供下载链接。账号验证和收款设置在发布者后台完成。
 
 ## Official references
 
