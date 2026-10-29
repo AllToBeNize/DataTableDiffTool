@@ -48,6 +48,7 @@ private:
 	void RefreshJumps();
 	bool CanRevertJump(TSharedPtr<FTableDiffJump> Jump) const;
 	FReply RevertJump(TSharedPtr<FTableDiffJump> Jump);
+	TSharedRef<SWidget> MakeRevertButton(TSharedPtr<FTableDiffJump> Jump, bool bSelectedOnly);
 	void SyncScroll(double Offset, bool bLocal);
 	void SyncDetailScroll(double Offset, bool bLocal);
 	void SyncExpansion(TSharedPtr<FTableFieldDiff> Field, bool bExpanded, bool bLocal);

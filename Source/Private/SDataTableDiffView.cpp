@@ -140,12 +140,14 @@ namespace
 			SLATE_ARGUMENT(bool, Local)
 			SLATE_ARGUMENT(bool, AbsentRow)
 			SLATE_ARGUMENT(TFunction<float(float)>, SharedHeight)
+			SLATE_ARGUMENT(TSharedPtr<SWidget>, RevertControl)
 			SLATE_ATTRIBUTE(bool, Focused)
 		SLATE_END_ARGS()
 		void Construct(const FArguments& Args, const TSharedRef<STableViewBase>& Owner)
 		{
 			Field = Args._Field; bLocal = Args._Local; bAbsentRow = Args._AbsentRow; SharedHeight = Args._SharedHeight;
 			Focused = Args._Focused;
+			RevertControl = Args._RevertControl;
 			SMultiColumnTableRow::Construct(FSuperRowType::FArguments().Padding(FMargin(0, 1))
 				.Style(&FAppStyle::Get().GetWidgetStyle<FTableRowStyle>(TEXT("DetailsView.TreeView.TableRow"))), Owner);
 		}
@@ -165,7 +167,9 @@ namespace
 			if (Field->OldValue.IsEmpty() && Field->NewValue.IsEmpty() && !Field->Children.IsEmpty())
 			{
 				return SNew(SBorder).Padding(0).BorderImage(FAppStyle::GetBrush(TEXT("DetailsView.CategoryMiddle")))
-					.BorderBackgroundColor_Lambda([this]() { return DetailBackground(); });
+					.BorderBackgroundColor_Lambda([this]() { return DetailBackground(); })
+					[SNew(SBox).HAlign(HAlign_Right).VAlign(VAlign_Center)
+						[RevertControl.IsValid() ? RevertControl.ToSharedRef() : SNullWidget::NullWidget]];
 			}
 			const FString Value = FieldValue(*Field, bLocal, bAbsentRow);
 			TSharedRef<SWidget> ValueWidget = SNew(SPropertyDiffTextBox).Value(FText::FromString(Value)).Color(DiffColor(Field->Kind));
@@ -178,7 +182,10 @@ namespace
 			return SNew(SBorder).Padding(FMargin(6, 3))
 				.BorderImage(FAppStyle::GetBrush(TEXT("WhiteBrush")))
 				.BorderBackgroundColor_Lambda([this]() { return DetailBackground(); })
-				[ValueWidget];
+				[SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1)[ValueWidget]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6, 0, 0, 0)
+					[RevertControl.IsValid() ? RevertControl.ToSharedRef() : SNullWidget::NullWidget]];
 		}
 	private:
 		FLinearColor DetailBackground(bool bAllowHover = false) const
@@ -199,6 +206,7 @@ namespace
 		bool bAbsentRow = false;
 		TFunction<float(float)> SharedHeight;
 		TAttribute<bool> Focused;
+		TSharedPtr<SWidget> RevertControl;
 	};
 }
 
@@ -536,7 +544,17 @@ TSharedRef<ITableRow> SDataTableDiffView::GenerateTableRow(TSharedPtr<FTableRowD
 
 TSharedRef<ITableRow> SDataTableDiffView::GenerateDetailRow(TSharedPtr<FTableFieldDiff> Field, const TSharedRef<STableViewBase>& Owner, bool bLocal)
 {
+	TSharedPtr<SWidget> RevertControl;
+	const auto* Jump = AllJumps.FindByPredicate([this, Field](const auto& Item)
+	{
+		return Item->Row == SelectedRow && Item->FieldPath == Field->Path;
+	});
+	if (Jump && RevertChange.IsBound())
+	{
+		RevertControl = MakeRevertButton(*Jump, false);
+	}
 	return SNew(STableDiffFocusedDetailRow, Owner).Field(Field).Local(bLocal).AbsentRow(SelectedRow && RowAbsent(*SelectedRow, bLocal))
+		.RevertControl(RevertControl)
 		.Focused_Lambda([this, Field]() { return !SelectedField.IsEmpty() && SelectedField == Field->Path; })
 		.SharedHeight([this, Field, bLocal](float Height) { return ShareDetailHeight(Field->Path, bLocal, Height); });
 }
@@ -550,22 +568,27 @@ TSharedRef<ITableRow> SDataTableDiffView::GenerateJump(TSharedPtr<FTableDiffJump
 			+ SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
 			[SNew(STextBlock).ColorAndOpacity(DiffColor(Jump->Kind)).Text(Label).ToolTipText(Label).OverflowPolicy(ETextOverflowPolicy::Ellipsis)]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(6, 0, 0, 0)
-			[SNew(SButton).ButtonStyle(FAppStyle::Get(), "SimpleButton").ContentPadding(0).IsFocusable(false)
-				.Visibility_Lambda([this, Jump]()
-				{
-					if (!RevertChange.IsBound()) { return EVisibility::Collapsed; }
-					return JumpList && JumpList->IsItemSelected(Jump) ? EVisibility::Visible : EVisibility::Hidden;
-				})
-				.ToolTipText_Lambda([this, Jump]()
-				{
-					return CanRevertJump(Jump)
-						? LOCTEXT("RevertInlineTip", "Restore this change from the compared revision. Supports Undo; save the DataTable to persist the edit.")
-						: LOCTEXT("RevertLocalOnlyTip", "Revert is only supported when the right version is Local.");
-				})
-				.IsEnabled_Lambda([this, Jump]() { return CanRevertJump(Jump); })
-				.OnClicked_Lambda([this, Jump]() { return RevertJump(Jump); })
-				[SNew(SImage).Image(FAppStyle::GetBrush("PropertyWindow.DiffersFromDefault")).DesiredSizeOverride(FVector2D(16, 16))]]);
+			[MakeRevertButton(Jump, true)]);
 	return TreeRow;
+}
+
+TSharedRef<SWidget> SDataTableDiffView::MakeRevertButton(TSharedPtr<FTableDiffJump> Jump, bool bSelectedOnly)
+{
+	return SNew(SButton).ButtonStyle(FAppStyle::Get(), "SimpleButton").ContentPadding(0).IsFocusable(false)
+		.Visibility_Lambda([this, Jump, bSelectedOnly]()
+		{
+			if (!RevertChange.IsBound()) { return EVisibility::Collapsed; }
+			return !bSelectedOnly || (JumpList && JumpList->IsItemSelected(Jump)) ? EVisibility::Visible : EVisibility::Hidden;
+		})
+		.ToolTipText_Lambda([this, Jump]()
+		{
+			return CanRevertJump(Jump)
+				? LOCTEXT("RevertInlineTip", "Restore this change from the compared revision. Supports Undo; save the DataTable to persist the edit.")
+				: LOCTEXT("RevertLocalOnlyTip", "Revert is only supported when the right version is Local.");
+		})
+		.IsEnabled_Lambda([this, Jump]() { return CanRevertJump(Jump); })
+		.OnClicked_Lambda([this, Jump]() { return RevertJump(Jump); })
+		[SNew(SImage).Image(FAppStyle::GetBrush("PropertyWindow.DiffersFromDefault")).DesiredSizeOverride(FVector2D(16, 16))];
 }
 
 float SDataTableDiffView::ColumnWidth(const FString& Path) const
@@ -616,7 +639,7 @@ void SDataTableDiffView::LoadLayout()
 {
 	auto LoadFraction = [](const TCHAR* Key, float& Value)
 	{
-		float Saved;
+		float Saved = Value;
 		if (GConfig->GetFloat(LayoutSection, Key, Saved, GEditorPerProjectIni) && FMath::IsFinite(Saved))
 		{
 			Value = FMath::Clamp(Saved, 0.05f, 0.95f);
@@ -633,7 +656,7 @@ void SDataTableDiffView::LoadLayout()
 	for (const FString& Entry : SavedColumns)
 	{
 		FString Path, Value;
-		float Width;
+		float Width = FieldWidth;
 		if (Entry.Split(TEXT("="), &Path, &Value) && GConfig->GetFloat(ColumnSection, *Path, Width, GEditorPerProjectIni) && FMath::IsFinite(Width))
 		{
 			ColumnWidths.Add(Path, FMath::Max(60.0f, Width));
