@@ -3,6 +3,8 @@
 | Field | Value |
 | --- | --- |
 | Product name | DataTable Diff Tool |
+| Publisher | Meowoods |
+| Support email | 2184196946@qq.com |
 | Tagline | Compare. Review. Restore. |
 | Product type | Unreal Engine Code Plugin / Tools & Plugins |
 | Version | 1.0.0 |
@@ -52,7 +54,7 @@ In **Editor Preferences > Plugins > DataTable Diff Tool**, set **Revision Compar
 
 ## Before publishing
 
-- Confirm the publisher name, support contact, documentation URL, price and license selections in the seller account. These have not been invented or embedded in the descriptor.
+- Publisher: Meowoods. Support: 2184196946@qq.com. Match these values in the seller account; confirm the documentation URL, price and license selections before publishing.
 - Build and test against every stock Unreal Engine version and platform selected on the listing. A custom UE build does not establish stock-version support.
 - Run a clean plugin packaging build for each supported engine; verify history, restore, Undo / Redo and layout persistence after restarting that engine.
 - Select a plugin-browser icon if desired; none is bundled in this source snapshot.

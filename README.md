@@ -1,5 +1,7 @@
 # DataTable Diff Tool
 
+Publisher / 发布者：Meowoods · Support / 联系方式：[2184196946@qq.com](mailto:2184196946@qq.com)
+
 独立的 Unreal Engine 编辑器代码插件，不依赖项目模块、脚本插件或项目资源。当前版本在 Windows 的定制 UE 5.8.1 下编译验证；原版引擎版本及其他平台尚未验证。
 
 ## 功能
