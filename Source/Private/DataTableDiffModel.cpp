@@ -1,3 +1,5 @@
+// Copyright Meowoods 2026. All Rights Reserved.
+
 #include "DataTableDiffModel.h"
 #include "Engine/DataTable.h"
 #include "UObject/TextProperty.h"

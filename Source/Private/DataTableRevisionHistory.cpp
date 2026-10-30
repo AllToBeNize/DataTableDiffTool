@@ -1,3 +1,5 @@
+// Copyright Meowoods 2026. All Rights Reserved.
+
 #include "DataTableRevisionHistory.h"
 #include "ISourceControlModule.h"
 #include "SourceControlOperations.h"

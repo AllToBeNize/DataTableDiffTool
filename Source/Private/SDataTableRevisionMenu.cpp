@@ -1,3 +1,5 @@
+// Copyright Meowoods 2026. All Rights Reserved.
+
 #include "SDataTableRevisionMenu.h"
 #include "DataTableRevisionHistory.h"
 #include "Engine/DataTable.h"

@@ -1,3 +1,5 @@
+// Copyright Meowoods 2026. All Rights Reserved.
+
 #include "SDataTableHistoryDiff.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"

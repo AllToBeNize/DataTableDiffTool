@@ -1,3 +1,5 @@
+// Copyright Meowoods 2026. All Rights Reserved.
+
 #pragma once
 
 #include "Engine/DeveloperSettings.h"

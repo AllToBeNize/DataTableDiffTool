@@ -1,3 +1,5 @@
+// Copyright Meowoods 2026. All Rights Reserved.
+
 #include "DataTableDiffToolbar.h"
 #include "SDataTableHistoryDiff.h"
 #include "SDataTableRevisionMenu.h"

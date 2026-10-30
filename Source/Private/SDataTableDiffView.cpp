@@ -1,3 +1,5 @@
+// Copyright Meowoods 2026. All Rights Reserved.
+
 #include "SDataTableDiffView.h"
 #include "Widgets/Input/SSearchBox.h"
 #include "Widgets/Input/SButton.h"

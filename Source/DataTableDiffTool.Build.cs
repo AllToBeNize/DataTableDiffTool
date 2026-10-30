@@ -1,3 +1,5 @@
+// Copyright Meowoods 2026. All Rights Reserved.
+
 using UnrealBuildTool;
 
 public class DataTableDiffTool : ModuleRules

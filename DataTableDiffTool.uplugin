@@ -2,6 +2,7 @@
 	"FileVersion": 3,
 	"Version": 1,
 	"VersionName": "1.0.0",
+	"EngineVersion": "5.8.0",
 	"FriendlyName": "DataTable Diff Tool",
 	"Description": "Compare DataTable history inside Unreal Editor, inspect nested property changes, and selectively restore local data with Undo support.",
 	"Category": "Editor",
@@ -13,7 +14,8 @@
 		{
 			"Name": "DataTableDiffTool",
 			"Type": "Editor",
-			"LoadingPhase": "PostEngineInit"
+			"LoadingPhase": "PostEngineInit",
+			"PlatformAllowList": ["Win64"]
 		}
 	],
 	"Plugins": [

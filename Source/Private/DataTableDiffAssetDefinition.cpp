@@ -1,3 +1,5 @@
+// Copyright Meowoods 2026. All Rights Reserved.
+
 #include "DataTableDiffAssetDefinition.h"
 #include "DataTableDiffSettings.h"
 #include "DataTableDiffToolbar.h"
