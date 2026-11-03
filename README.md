@@ -55,7 +55,3 @@ History uses Unreal's source-control provider interfaces. Perforce has been test
 - **按项恢复 / Selective restore** — 恢复整行、容器或单个字段，支持撤销与重做。Restore rows, containers, or individual fields with Undo / Redo.
 
 - **同步浏览 / Synchronized navigation** — 搜索变更，同步定位、展开和滚动；只读文本可复制。Search changes and synchronize navigation, expansion, and scrolling; copy read-only values.
-
-- **可停靠窗口 / Dockable workspace** — 窗口内切换 DataTable，记住面板比例和列宽。Switch DataTables and retain panel proportions and column widths.
-
-- **异步历史 / Asynchronous history** — 异步查询与下载版本，按需读取较旧的 Perforce 内容。Fetch history and revisions asynchronously, including older Perforce revisions on demand.
