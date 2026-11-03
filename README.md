@@ -4,6 +4,8 @@
 
 Compare DataTable revisions side by side in Unreal Editor and selectively restore local data.
 
+![DataTable Diff Tool preview](Docs/Preview.png)
+
 ## 安装与使用
 
 1. 将插件放入 `YourProject/Plugins/DataTableDiffTool/`，确保该目录下包含 `DataTableDiffTool.uplugin`。
