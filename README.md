@@ -8,7 +8,7 @@ Compare DataTable revisions side by side in Unreal Editor and selectively restor
 
 ## 安装与使用
 
-1. 将整个 `DataTableDiffTool` 文件夹放进项目的 `Plugins` 目录。
+1. 将整个 `DataTableDiffTool` 文件夹放进 `YourProject/Plugins/`。如果项目还没有 `Plugins` 目录，在项目根目录手动创建一个。
 
 2. 使用 UE 5.8 C++ 工具链编译项目的 Editor 目标，重启编辑器并确认插件已启用。内置依赖 `EngineAssetDefinitions` 会自动启用。
 
@@ -28,7 +28,7 @@ Compare DataTable revisions side by side in Unreal Editor and selectively restor
 
 ## Installation and usage
 
-1. Copy the entire `DataTableDiffTool` folder into your project's `Plugins` directory.
+1. Copy the entire `DataTableDiffTool` folder into `YourProject/Plugins/`. If the `Plugins` directory does not exist, create it in the project root.
 
 2. Build your project's Editor target with a UE 5.8 C++ toolchain, restart the editor, and confirm the plugin is enabled. The built-in `EngineAssetDefinitions` dependency is enabled automatically.
 
